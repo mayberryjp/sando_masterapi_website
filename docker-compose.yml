@@ -4,7 +4,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - C:\database:/data:ro
+      - /docker/homelabids-masterapi/errorreport:/database:ro
     environment:
-      - DB_PATH=/data/errors.db
+      - DB_PATH=/database/errors.db
     restart: unless-stopped

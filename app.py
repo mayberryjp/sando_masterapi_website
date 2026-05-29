@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-DB_PATH = os.environ.get("DB_PATH", r"C:\database\errors.db")
+DB_PATH = os.environ.get("DB_PATH", r"/database/errors.db")
 
 
 def get_db():
