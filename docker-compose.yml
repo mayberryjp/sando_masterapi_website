@@ -1,5 +1,5 @@
 services:
-  dashboard:
+  sando_masterapi:
     build: .
     ports:
       - "5000:5000"
