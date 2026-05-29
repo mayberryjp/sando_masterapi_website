@@ -1,6 +1,6 @@
 services:
   sando_masterapi:
-    build: .
+    image: sando_masterapi:latest
     ports:
       - "5000:5000"
     volumes:

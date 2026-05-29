@@ -149,6 +149,7 @@ def recent_errors():
                COUNT(*) as count,
                MAX(timestamp) as last_seen_raw
         FROM error_reports
+        WHERE timestamp >= strftime('%Y%m%d%H%M%S', 'now', '-7 days')
         GROUP BY error_message, script_name, file_name, site
         ORDER BY last_seen_raw DESC
         LIMIT 200
