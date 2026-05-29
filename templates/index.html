@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Reports Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-trendline@2.1.4/dist/chartjs-plugin-trendline.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f1117; color: #e1e4e8; }
+        .header { background: #161b22; padding: 20px 32px; border-bottom: 1px solid #30363d; }
+        .header h1 { font-size: 22px; font-weight: 600; color: #f0f6fc; }
+        .header p { color: #8b949e; font-size: 13px; margin-top: 4px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+        /* Summary Cards */
+        .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .card .label { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .value { font-size: 32px; font-weight: 700; margin-top: 6px; color: #f0f6fc; }
+        .card.alert .value { color: #f85149; }
+
+        /* Chart sections */
+        .chart-row { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
+        .chart-row.split { grid-template-columns: 2fr 1fr; }
+        .chart-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .chart-box h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: #f0f6fc; }
+        .chart-container { position: relative; width: 100%; height: 300px; }
+
+        /* Tables */
+        .table-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+        .table-box h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #f0f6fc; }
+        .search-bar { width: 100%; padding: 8px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+                       color: #e1e4e8; font-size: 13px; margin-bottom: 12px; }
+        .search-bar:focus { outline: none; border-color: #58a6ff; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #30363d; color: #8b949e; font-weight: 600;
+             cursor: pointer; user-select: none; white-space: nowrap; }
+        th:hover { color: #58a6ff; }
+        td { padding: 8px 12px; border-bottom: 1px solid #21262d; max-width: 500px; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+        tr:hover td { background: #1c2128; }
+        .error-msg { color: #f8d7a4; }
+        .script-badge { display: inline-block; background: #1f3a5f; color: #58a6ff; padding: 2px 8px;
+                        border-radius: 10px; font-size: 11px; font-weight: 500; }
+        .count-badge { display: inline-block; background: #3d1f1f; color: #f85149; padding: 2px 8px;
+                       border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .timestamp { color: #8b949e; font-family: monospace; font-size: 12px; }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .cards { grid-template-columns: repeat(2, 1fr); }
+            .chart-row.split { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 500px) {
+            .cards { grid-template-columns: 1fr; }
+        }
+
+        .loading { text-align: center; color: #8b949e; padding: 40px; }
+
+        /* Trend indicator */
+        .trend { font-size: 13px; margin-top: 4px; }
+        .trend.up { color: #f85149; }
+        .trend.down { color: #3fb950; }
+        .trend.flat { color: #8b949e; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Error Reports Dashboard</h1>
+        <p>Tracking error trends and recent failures — auto-refreshes every 60s</p>
+    </div>
+    <div class="container">
+        <!-- Summary Cards -->
+        <div class="cards">
+            <div class="card" id="card-total"><div class="label">Total Errors</div><div class="value" id="total">—</div></div>
+            <div class="card alert" id="card-today"><div class="label">Errors Today</div><div class="value" id="today">—</div></div>
+            <div class="card" id="card-week"><div class="label">Last 7 Days</div><div class="value" id="week">—</div><div class="trend" id="week-trend"></div></div>
+            <div class="card" id="card-month"><div class="label">Last 30 Days</div><div class="value" id="month">—</div><div class="trend" id="month-trend"></div></div>
+        </div>
+
+        <!-- Daily errors trend -->
+        <div class="chart-row">
+            <div class="chart-box">
+                <h2>Daily Error Count (Are errors increasing?)</h2>
+                <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Weekly trend + by script -->
+        <div class="chart-row split">
+            <div class="chart-box">
+                <h2>Weekly Error Trend</h2>
+                <div class="chart-container"><canvas id="weeklyChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h2>Errors by Script (All Time)</h2>
+                <div class="chart-container"><canvas id="scriptChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Errors by script over time -->
+        <div class="chart-row">
+            <div class="chart-box">
+                <h2>Errors by Script Over Time</h2>
+                <div class="chart-container"><canvas id="scriptTimeChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Top error messages -->
+        <div class="table-box">
+            <h2>Top Error Messages (Last 7 Days)</h2>
+            <table>
+                <thead>
+                    <tr><th>Count</th><th>Site</th><th>Script</th><th>Error Message</th><th>Last Seen</th></tr>
+                </thead>
+                <tbody id="top-errors-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Recent errors -->
+        <div class="table-box">
+            <h2>Recent Errors (Deduplicated)</h2>
+            <input type="text" class="search-bar" id="search" placeholder="Filter errors by message, script, site, or file...">
+            <table>
+                <thead>
+                    <tr><th>Last Seen</th><th>Count</th><th>Site</th><th>Script</th><th>File</th><th>Error Message</th></tr>
+                </thead>
+                <tbody id="recent-errors-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const COLORS = ['#58a6ff','#f85149','#3fb950','#d29922','#bc8cff','#f778ba','#79c0ff','#ffa657'];
+
+        // --- SUMMARY ---
+        async function loadSummary() {
+            const res = await fetch('/api/summary');
+            const d = await res.json();
+            document.getElementById('total').textContent = d.total.toLocaleString();
+            document.getElementById('today').textContent = d.today.toLocaleString();
+            document.getElementById('week').textContent = d.week.toLocaleString();
+            document.getElementById('month').textContent = d.month.toLocaleString();
+        }
+
+        // --- DAILY CHART ---
+        let dailyChart;
+        async function loadDailyChart() {
+            const res = await fetch('/api/errors-over-time');
+            const data = await res.json();
+            const labels = data.map(d => d.date);
+            const counts = data.map(d => d.count);
+
+            // Calculate 7-day moving average
+            const ma = [];
+            for (let i = 0; i < counts.length; i++) {
+                if (i < 6) { ma.push(null); continue; }
+                let sum = 0;
+                for (let j = i - 6; j <= i; j++) sum += counts[j];
+                ma.push(Math.round(sum / 7));
+            }
+
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            if (dailyChart) dailyChart.destroy();
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Daily Errors', data: counts, backgroundColor: 'rgba(88,166,255,0.4)',
+                          borderColor: '#58a6ff', borderWidth: 1 },
+                        { label: '7-Day Moving Avg', data: ma, type: 'line', borderColor: '#f85149',
+                          borderWidth: 2, pointRadius: 0, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#8b949e', maxTicksLimit: 20 }, grid: { color: '#21262d' } },
+                        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, beginAtZero: true }
+                    },
+                    plugins: { legend: { labels: { color: '#e1e4e8' } } }
+                }
+            });
+
+            // Trend indicator: compare last 7 days avg to previous 7 days avg
+            if (counts.length >= 14) {
+                const recent7 = counts.slice(-7).reduce((a, b) => a + b, 0) / 7;
+                const prev7 = counts.slice(-14, -7).reduce((a, b) => a + b, 0) / 7;
+                const pct = ((recent7 - prev7) / prev7 * 100).toFixed(0);
+                const el = document.getElementById('week-trend');
+                if (pct > 5) { el.textContent = `▲ ${pct}% vs prior week`; el.className = 'trend up'; }
+                else if (pct < -5) { el.textContent = `▼ ${Math.abs(pct)}% vs prior week`; el.className = 'trend down'; }
+                else { el.textContent = `— flat vs prior week`; el.className = 'trend flat'; }
+            }
+        }
+
+        // --- WEEKLY CHART ---
+        let weeklyChart;
+        async function loadWeeklyChart() {
+            const res = await fetch('/api/weekly-trend');
+            const data = await res.json();
+            const labels = data.map(d => d.week_start);
+            const counts = data.map(d => d.count);
+
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            if (weeklyChart) weeklyChart.destroy();
+            weeklyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Errors per Week',
+                        data: counts,
+                        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+                        fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#58a6ff'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#8b949e', maxTicksLimit: 15 }, grid: { color: '#21262d' } },
+                        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, beginAtZero: true }
+                    },
+                    plugins: { legend: { labels: { color: '#e1e4e8' } } }
+                }
+            });
+
+            // Month trend
+            if (counts.length >= 8) {
+                const recent4 = counts.slice(-4).reduce((a, b) => a + b, 0);
+                const prev4 = counts.slice(-8, -4).reduce((a, b) => a + b, 0);
+                const pct = ((recent4 - prev4) / prev4 * 100).toFixed(0);
+                const el = document.getElementById('month-trend');
+                if (pct > 5) { el.textContent = `▲ ${pct}% vs prior month`; el.className = 'trend up'; }
+                else if (pct < -5) { el.textContent = `▼ ${Math.abs(pct)}% vs prior month`; el.className = 'trend down'; }
+                else { el.textContent = `— flat vs prior month`; el.className = 'trend flat'; }
+            }
+        }
+
+        // --- SCRIPT PIE CHART ---
+        let scriptChart;
+        async function loadScriptChart() {
+            const res = await fetch('/api/errors-by-script');
+            const data = await res.json();
+            const ctx = document.getElementById('scriptChart').getContext('2d');
+            if (scriptChart) scriptChart.destroy();
+            scriptChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(d => d.script_name),
+                    datasets: [{ data: data.map(d => d.count), backgroundColor: COLORS }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#e1e4e8', font: { size: 11 }, padding: 8 } }
+                    }
+                }
+            });
+        }
+
+        // --- SCRIPT OVER TIME (STACKED) ---
+        let scriptTimeChart;
+        async function loadScriptTimeChart() {
+            const res = await fetch('/api/errors-by-script-over-time');
+            const data = await res.json();
+            const datasets = Object.entries(data.series).map(([name, values], i) => ({
+                label: name,
+                data: values,
+                backgroundColor: COLORS[i % COLORS.length] + '66',
+                borderColor: COLORS[i % COLORS.length],
+                borderWidth: 1,
+                fill: true
+            }));
+
+            const ctx = document.getElementById('scriptTimeChart').getContext('2d');
+            if (scriptTimeChart) scriptTimeChart.destroy();
+            scriptTimeChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: data.dates, datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#8b949e', maxTicksLimit: 20 }, grid: { color: '#21262d' }, stacked: true },
+                        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, stacked: true }
+                    },
+                    plugins: { legend: { labels: { color: '#e1e4e8' } } }
+                }
+            });
+        }
+
+        // --- TOP ERRORS TABLE ---
+        async function loadTopErrors() {
+            const res = await fetch('/api/top-errors');
+            const data = await res.json();
+            const tbody = document.getElementById('top-errors-body');
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td><span class="count-badge">${d.count.toLocaleString()}</span></td>
+                    <td>${esc(d.site)}</td>
+                    <td><span class="script-badge">${esc(d.script_name)}</span></td>
+                    <td class="error-msg" title="${esc(d.error_message)}">${esc(d.error_message)}</td>
+                    <td class="timestamp">${esc(d.last_seen)}</td>
+                </tr>
+            `).join('');
+        }
+
+        // --- RECENT ERRORS TABLE ---
+        let recentData = [];
+        async function loadRecentErrors() {
+            const res = await fetch('/api/recent-errors');
+            recentData = await res.json();
+            renderRecent('');
+        }
+        function renderRecent(filter) {
+            const f = filter.toLowerCase();
+            const filtered = f ? recentData.filter(d =>
+                d.error_message.toLowerCase().includes(f) ||
+                d.script_name.toLowerCase().includes(f) ||
+                d.file_name.toLowerCase().includes(f) ||
+                d.site.toLowerCase().includes(f)
+            ) : recentData;
+            const tbody = document.getElementById('recent-errors-body');
+            tbody.innerHTML = filtered.map(d => `
+                <tr>
+                    <td class="timestamp">${esc(d.last_seen)}</td>
+                    <td><span class="count-badge">${d.count.toLocaleString()}</span></td>
+                    <td>${esc(d.site)}</td>
+                    <td><span class="script-badge">${esc(d.script_name)}</span></td>
+                    <td>${esc(d.file_name)}</td>
+                    <td class="error-msg" title="${esc(d.error_message)}">${esc(d.error_message)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function esc(s) {
+            const div = document.createElement('div');
+            div.textContent = s || '';
+            return div.innerHTML;
+        }
+
+        // Search
+        document.getElementById('search').addEventListener('input', e => renderRecent(e.target.value));
+
+        // Load all
+        async function loadAll() {
+            await Promise.all([loadSummary(), loadDailyChart(), loadWeeklyChart(),
+                               loadScriptChart(), loadScriptTimeChart(), loadTopErrors(), loadRecentErrors()]);
+        }
+        loadAll();
+        setInterval(loadAll, 60000);
+    </script>
+</body>
+</html>

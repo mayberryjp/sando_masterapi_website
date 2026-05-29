@@ -1,0 +1,10 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - C:\database:/data:ro
+    environment:
+      - DB_PATH=/data/errors.db
+    restart: unless-stopped
