@@ -1,10 +1,12 @@
 services:
   sando_masterapi:
-    image: sando_masterapi:latest
+    image: sando_masterapi_website:latest
     ports:
       - "5000:5000"
     volumes:
       - /docker/homelabids-masterapi/errorreport:/database:ro
     environment:
-      - DB_PATH=/database/errors.db
+      DATABASE_URL: sqlite:////database/errors.db
+      API_LISTEN_ADDRESS: 0.0.0.0
+      API_PORT: "5000"
     restart: unless-stopped
